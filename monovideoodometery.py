@@ -3,7 +3,7 @@ import cv2
 import os
 
 
-class MonoVideoOdometery(object):
+class MonoVideoOdometeryFromFile(object):
     def __init__(self, 
                 img_file_path,
                 pose_file_path,
@@ -182,6 +182,168 @@ class MonoVideoOdometery(object):
         else:
             self.old_frame = self.current_frame
             self.current_frame = cv2.imread(self.file_path + str(self.id).zfill(6)+'.png', cv2.IMREAD_GRAYSCALE)
+            self.visual_odometery()
+            self.id += 1
+
+
+class MonoVideoOdometeryFromCam(object):
+    def __init__(self, 
+                cap,
+                fx = 4975.15099,
+                fy = 4923.0829,
+                pp = (317.1178, 244.2046), 
+                lk_params=dict(winSize  = (21,21), criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01)), 
+                detector=cv2.FastFeatureDetector_create(threshold=25, nonmaxSuppression=True)):
+        
+        '''
+        Arguments:
+            cap -- camera capture feed that leads to image sequences
+        
+        Keyword Arguments:
+            focal_length {float} -- Focal length of camera used in image sequence (default: {718.8560})
+            pp {tuple} -- Principal point of camera in image sequence (default: {(607.1928, 185.2157)})
+            lk_params {dict} -- Parameters for Lucas Kanade optical flow (default: {dict(winSize  = (21,21), criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01))})
+            detector {cv2.FeatureDetector} -- Most types of OpenCV feature detectors (default: {cv2.FastFeatureDetector_create(threshold=25, nonmaxSuppression=True)})
+        
+        Raises:
+            ValueError -- Raised when camera is not configured correctly
+        '''
+
+
+        self.cap = cap
+        self.detector = detector
+        self.lk_params = lk_params
+        self.fx = fx
+        self.fy = fy
+        self.pp = pp
+        self.camMat = np.zeros(shape=(3,3))
+        self.camMat[0,0] = self.fx
+        self.camMat[1,1] = self.fy
+        self.camMat[2,2] = 1
+        self.camMat[0,2] = self.pp[0]
+        self.camMat[1,2] = self.pp[1]
+        self.R = np.zeros(shape=(3, 3))
+        self.t = np.zeros(shape=(3, 3))
+        self.id = 0
+        self.n_features = 0
+
+        try:
+            if not self.cap.isOpened():
+                raise ValueError("Cannot open camera")
+        except Exception as e:
+            print(e)
+            raise ValueError("Cannot find camera")
+
+        self.process_frame()
+
+
+    def detect(self, img):
+        '''Used to detect features and parse into useable format
+
+        
+        Arguments:
+            img {np.ndarray} -- Image for which to detect keypoints on
+        
+        Returns:
+            np.array -- A sequence of points in (x, y) coordinate format
+            denoting location of detected keypoint
+        '''
+
+        p0 = self.detector.detect(img)
+        
+        return np.array([x.pt for x in p0], dtype=np.float32).reshape(-1, 1, 2)
+
+
+    def visual_odometery(self):
+        '''
+        Used to perform visual odometery. If features fall out of frame
+        such that there are less than 2000 features remaining, a new feature
+        detection is triggered. 
+        '''
+
+        if self.n_features < 2000:
+            self.p0 = self.detect(self.old_frame)
+
+
+        # Calculate optical flow between frames, st holds status
+        # of points from frame to frame
+        self.p1, st, err = cv2.calcOpticalFlowPyrLK(self.old_frame, self.current_frame, self.p0, None, **self.lk_params)
+        
+
+        # Save the good points from the optical flow
+        self.good_old = self.p0[st == 1]
+        self.good_new = self.p1[st == 1]
+
+
+        # If the frame is one of first two, we need to initalize
+        # our t and R vectors so behavior is different
+        if self.id < 2:
+            E, _ = cv2.findEssentialMat(self.good_new, self.good_old, cameraMatrix=self.camMat, method=cv2.RANSAC, prob=0.999, threshold=1.0, mask=None)
+            _, self.R, self.t, _ = cv2.recoverPose(E, self.good_old, self.good_new, cameraMatrix=self.camMat, R=self.R.copy(), t=self.t.copy(), mask=None)
+        else:
+            E, _ = cv2.findEssentialMat(self.good_new, self.good_old, cameraMatrix=self.camMat, method=cv2.RANSAC, prob=0.999, threshold=1.0, mask=None)
+            _, R, t, _ = cv2.recoverPose(E, self.good_old, self.good_new,  cameraMatrix=self.camMat, R=self.R.copy(), t=self.t.copy(), mask=None)
+
+            absolute_scale = self.get_absolute_scale()
+            if (absolute_scale > 0.1 and abs(t[2][0]) > abs(t[0][0]) and abs(t[2][0]) > abs(t[1][0])):
+                self.t = self.t + absolute_scale*self.R.dot(t)
+                self.R = R.dot(self.R)
+
+        # Save the total number of good features
+        self.n_features = self.good_new.shape[0]
+
+
+    def get_mono_coordinates(self):
+        # We multiply by the diagonal matrix to fix our vector
+        # onto same coordinate axis as true values
+        diag = np.array([[-1, 0, 0],
+                        [0, -1, 0],
+                        [0, 0, -1]])
+        adj_coord = np.matmul(diag, self.t)
+
+        return adj_coord.flatten()
+
+
+    def get_absolute_scale(self):
+        '''Used to provide scale estimation for mutliplying
+           translation vectors
+        
+        Returns:
+            float -- Scalar value allowing for scale estimation
+        '''
+        pose = self.pose[self.id - 1].strip().split()
+        x_prev = float(pose[3])
+        y_prev = float(pose[7])
+        z_prev = float(pose[11])
+        pose = self.pose[self.id].strip().split()
+        x = float(pose[3])
+        y = float(pose[7])
+        z = float(pose[11])
+
+        true_vect = np.array([[x], [y], [z]])
+        self.true_coord = true_vect
+        prev_vect = np.array([[x_prev], [y_prev], [z_prev]])
+        
+        return np.linalg.norm(true_vect - prev_vect)
+
+
+    def process_frame(self):
+        '''Processes images in sequence frame by frame
+        '''
+
+        if self.id < 2:
+            #self.old_frame = cv2.imread(self.file_path +str().zfill(6)+'.png', cv2.IMREAD_GRAYSCALE)
+            #self.current_frame = cv2.imread(self.file_path + str(1).zfill(6)+'.png', cv2.IMREAD_GRAYSCALE)
+            self.colorframe,_ = self.cap.read()
+            self.old_frame = cv2.cvtColor(self.colorframe, cv2.COLOR_BGR2GRAY) 
+            self.colorframe,_ = self.cap.read()
+            self.current_frame,_ = cv2.cvtColor(self.colorframe, cv2.COLOR_BGR2GRAY)
+            self.visual_odometery()
+            self.id = 2
+        else:
+            self.old_frame = self.current_frame
+            self.colorframe = self.cap.read()
+            self.current_frame,_ = cv2.cvtColor(self.colorframe, cv2.COLOR_BGR2GRAY)
             self.visual_odometery()
             self.id += 1
 
