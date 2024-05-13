@@ -4,9 +4,9 @@ import matplotlib.pyplot as plt
 from monovideoodometery import MonoVideoOdometery
 import os
 
-
-img_path = 'C:\\Users\\Ali\\Desktop\\Projects\\SLAM\\videos\\data_odometry_gray\\dataset\\sequences\\00\\image_0\\'
-pose_path = 'C:\\Users\\Ali\\Desktop\\Projects\\SLAM\\videos\\data_odometry_poses\\dataset\\poses\\00.txt'
+#C:\Users\EladD\source\repos\Monocular-Video-Odometery\dataset
+img_path = '.\\dataset\\sequences\\00\\image_2\\'
+pose_path = '.\\dataset\\poses\\00.txt'
 
 focal = 718.8560
 pp = (607.1928, 185.2157)

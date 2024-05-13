@@ -31,6 +31,12 @@ class MonoVideoOdometery(object):
         self.lk_params = lk_params
         self.focal = focal_length
         self.pp = pp
+        self.camMat = np.zeros(shape=(3,3))
+        self.camMat[0,0] = self.focal
+        self.camMat[1,1] = self.focal
+        self.camMat[2,2] = 1
+        self.camMat[0,2] = self.pp[0]
+        self.camMat[1,2] = self.pp[1]
         self.R = np.zeros(shape=(3, 3))
         self.t = np.zeros(shape=(3, 3))
         self.id = 0
@@ -107,10 +113,10 @@ class MonoVideoOdometery(object):
         # our t and R vectors so behavior is different
         if self.id < 2:
             E, _ = cv2.findEssentialMat(self.good_new, self.good_old, self.focal, self.pp, cv2.RANSAC, 0.999, 1.0, None)
-            _, self.R, self.t, _ = cv2.recoverPose(E, self.good_old, self.good_new, self.R, self.t, self.focal, self.pp, None)
+            _, self.R, self.t, _ = cv2.recoverPose(E, self.good_old, self.good_new, self.R.copy(), self.t.copy(), focal=self.focal, pp=self.pp, mask=None)
         else:
             E, _ = cv2.findEssentialMat(self.good_new, self.good_old, self.focal, self.pp, cv2.RANSAC, 0.999, 1.0, None)
-            _, R, t, _ = cv2.recoverPose(E, self.good_old, self.good_new, self.R.copy(), self.t.copy(), self.focal, self.pp, None)
+            _, R, t, _ = cv2.recoverPose(E, self.good_old, self.good_new, self.R.copy(), self.t.copy(), focal=self.focal, pp=self.pp, mask=None)
 
             absolute_scale = self.get_absolute_scale()
             if (absolute_scale > 0.1 and abs(t[2][0]) > abs(t[0][0]) and abs(t[2][0]) > abs(t[1][0])):
@@ -169,13 +175,13 @@ class MonoVideoOdometery(object):
         '''
 
         if self.id < 2:
-            self.old_frame = cv2.imread(self.file_path +str().zfill(6)+'.png', 0)
-            self.current_frame = cv2.imread(self.file_path + str(1).zfill(6)+'.png', 0)
+            self.old_frame = cv2.imread(self.file_path +str().zfill(6)+'.png', cv2.IMREAD_GRAYSCALE)
+            self.current_frame = cv2.imread(self.file_path + str(1).zfill(6)+'.png', cv2.IMREAD_GRAYSCALE)
             self.visual_odometery()
             self.id = 2
         else:
             self.old_frame = self.current_frame
-            self.current_frame = cv2.imread(self.file_path + str(self.id).zfill(6)+'.png', 0)
+            self.current_frame = cv2.imread(self.file_path + str(self.id).zfill(6)+'.png', cv2.IMREAD_GRAYSCALE)
             self.visual_odometery()
             self.id += 1
 
