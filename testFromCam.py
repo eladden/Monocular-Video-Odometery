@@ -11,9 +11,11 @@ cap = cv.VideoCapture(0)
 #fy = 4923.0829
 #pp = (317.1178, 244.2046)
 #Office camera
-fx = 537.03135
-fy = 537.4687
-pp = (324.0338, 202.3821)
+#fx = 537.03135
+#fy = 537.4687
+#pp = (324.0338, 202.3821)
+focal = 537.0
+pp = (320.0,240.0)
 
 R_total = np.zeros((3, 3))
 t_total = np.empty(shape=(3, 1))
@@ -26,7 +28,7 @@ lk_params = dict( winSize  = (21,21),
 # Create some random colors
 color = np.random.randint(0,255,(5000,3))
 
-vo = MonoVideoOdometeryFromCam(cap, fx, fy, pp, lk_params)
+vo = MonoVideoOdometeryFromCam(cap, focal, pp, lk_params)
 traj = np.zeros(shape=(600, 800, 3))
 
 # mask = np.zeros_like(vo.current_frame)
@@ -60,7 +62,7 @@ while(vo.cap.isOpened()):
 
     vo.process_frame()
 
-    print(vo.get_mono_coordinates())
+    #print(vo.get_mono_coordinates())
 
     mono_coord = vo.get_mono_coordinates()
     #true_coord = vo.get_true_coordinates()

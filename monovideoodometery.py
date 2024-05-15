@@ -189,11 +189,12 @@ class MonoVideoOdometeryFromFile(object):
 class MonoVideoOdometeryFromCam(object):
     def __init__(self, 
                 cap,
-                fx = 537.03135,
-                fy = 537.4687,
-                pp = (324.0338, 202.3821), 
+                #fx = 537.03135,
+                #fy = 537.4687,
+                focal_length=537.0,
+                pp = (320.0, 240.0), 
                 lk_params=dict(winSize  = (21,21), criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01)), 
-                absolute_scale = 10,
+                absolute_scale = 1,
                 detector=cv2.FastFeatureDetector_create(threshold=25, nonmaxSuppression=True)):
         
         '''
@@ -214,15 +215,16 @@ class MonoVideoOdometeryFromCam(object):
         self.cap = cap
         self.detector = detector
         self.lk_params = lk_params
-        self.fx = fx
-        self.fy = fy
+        #self.fx = fx
+        #self.fy = fy
         self.pp = pp
-        self.camMat = np.zeros(shape=(3,3))
-        self.camMat[0,0] = self.fx
-        self.camMat[1,1] = self.fy
-        self.camMat[2,2] = 1
-        self.camMat[0,2] = self.pp[0]
-        self.camMat[1,2] = self.pp[1]
+        self.focal = focal_length
+        #self.camMat = np.zeros(shape=(3,3))
+        #self.camMat[0,0] = self.fx
+        #self.camMat[1,1] = self.fy
+        #self.camMat[2,2] = 1
+        #self.camMat[0,2] = self.pp[0]
+        #self.camMat[1,2] = self.pp[1]
         self.R = np.zeros(shape=(3, 3))
         self.t = np.zeros(shape=(3, 3))
         self.id = 0
@@ -262,7 +264,6 @@ class MonoVideoOdometeryFromCam(object):
         such that there are less than 2000 features remaining, a new feature
         detection is triggered. 
         '''
-        success = True
 
         if self.n_features < 2000:
             self.p0 = self.detect(self.old_frame)
@@ -283,20 +284,27 @@ class MonoVideoOdometeryFromCam(object):
 
         # If the frame is one of first two, we need to initalize
         # our t and R vectors so behavior is different
+        print(self.id)
         if self.id < 2:
-            E, _ = cv2.findEssentialMat(self.good_new, self.good_old, cameraMatrix=self.camMat, method=cv2.RANSAC, prob=0.999, threshold=1.0, mask=None)
-            _, self.R, self.t, _ = cv2.recoverPose(E, self.good_old, self.good_new, cameraMatrix=self.camMat, R=self.R.copy(), t=self.t.copy(), mask=None)
+            E, _ = cv2.findEssentialMat(self.good_new, self.good_old, self.focal, self.pp, cv2.RANSAC, 0.999, 1.0, None)
+            _, self.R, self.t, _ = cv2.recoverPose(E, self.good_old, self.good_new, self.R.copy(), self.t.copy(), focal=self.focal, pp=self.pp, mask=None)
         else:
-            E, _ = cv2.findEssentialMat(self.good_new, self.good_old, cameraMatrix=self.camMat, method=cv2.RANSAC, prob=0.999, threshold=1.0, mask=None)
-            _, R, t, _ = cv2.recoverPose(E, self.good_old, self.good_new,  cameraMatrix=self.camMat, R=self.R.copy(), t=self.t.copy(), mask=None)
+            E, _ = cv2.findEssentialMat(self.good_new, self.good_old, self.focal, self.pp, cv2.RANSAC, 0.999, 1.0, None)
+            _, R, t, _ = cv2.recoverPose(E, self.good_old, self.good_new, self.R.copy(), self.t.copy(), focal=self.focal, pp=self.pp, mask=None)
 
             #absolute_scale = self.get_absolute_scale()
+            
             if (self.absolute_scale > 0.1 and abs(t[2][0]) > abs(t[0][0]) and abs(t[2][0]) > abs(t[1][0])):
-                self.t = self.t + self.absolute_scale*self.R.dot(t)
+            #    self.t = self.t + self.absolute_scale*self.R.dot(t)
                 self.R = R.dot(self.R)
+            
+            self.t = self.t + self.absolute_scale*self.R.dot(t)
+            #self.R = R.dot(self.R)
 
         # Save the total number of good features
         self.n_features = self.good_new.shape[0]
+
+        return True
 
 
     def get_mono_coordinates(self):
