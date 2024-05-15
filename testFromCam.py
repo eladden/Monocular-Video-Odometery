@@ -6,9 +6,14 @@ import os
 
 cap = cv.VideoCapture(0)
 
-fx = 4975.15099
-fy = 4923.0829
-pp = (317.1178, 244.2046)
+#Home camera
+#fx = 4975.15099
+#fy = 4923.0829
+#pp = (317.1178, 244.2046)
+#Office camera
+fx = 537.03135
+fy = 537.4687
+pp = (324.0338, 202.3821)
 
 R_total = np.zeros((3, 3))
 t_total = np.empty(shape=(3, 1))
@@ -26,7 +31,7 @@ traj = np.zeros(shape=(600, 800, 3))
 
 # mask = np.zeros_like(vo.current_frame)
 # flag = False
-while(vo.hasNextFrame()):
+while(vo.cap.isOpened()):
 
     frame = vo.colorframe
 
@@ -58,20 +63,20 @@ while(vo.hasNextFrame()):
     print(vo.get_mono_coordinates())
 
     mono_coord = vo.get_mono_coordinates()
-    true_coord = vo.get_true_coordinates()
+    #true_coord = vo.get_true_coordinates()
 
-    print("MSE Error: ", np.linalg.norm(mono_coord - true_coord))
+    #print("MSE Error: ", np.linalg.norm(mono_coord - true_coord))
     print("x: {}, y: {}, z: {}".format(*[str(pt) for pt in mono_coord]))
-    print("true_x: {}, true_y: {}, true_z: {}".format(*[str(pt) for pt in true_coord]))
+    #print("true_x: {}, true_y: {}, true_z: {}".format(*[str(pt) for pt in true_coord]))
 
     draw_x, draw_y, draw_z = [int(round(x)) for x in mono_coord]
-    true_x, true_y, true_z = [int(round(x)) for x in true_coord]
+    #true_x, true_y, true_z = [int(round(x)) for x in true_coord]
 
-    traj = cv.circle(traj, (true_x + 400, true_z + 100), 1, list((0, 0, 255)), 4)
+    #traj = cv.circle(traj, (true_x + 400, true_z + 100), 1, list((0, 0, 255)), 4)
     traj = cv.circle(traj, (draw_x + 400, draw_z + 100), 1, list((0, 255, 0)), 4)
 
-    cv.putText(traj, 'Actual Position:', (140, 90), cv.FONT_HERSHEY_SIMPLEX, 0.5,(255,255,255), 1)
-    cv.putText(traj, 'Red', (270, 90), cv.FONT_HERSHEY_SIMPLEX, 0.5,(0, 0, 255), 1)
+    #cv.putText(traj, 'Actual Position:', (140, 90), cv.FONT_HERSHEY_SIMPLEX, 0.5,(255,255,255), 1)
+    #cv.putText(traj, 'Red', (270, 90), cv.FONT_HERSHEY_SIMPLEX, 0.5,(0, 0, 255), 1)
     cv.putText(traj, 'Estimated Odometry Position:', (30, 120), cv.FONT_HERSHEY_SIMPLEX, 0.5,(255,255,255), 1)
     cv.putText(traj, 'Green', (270, 120), cv.FONT_HERSHEY_SIMPLEX, 0.5,(0, 255, 0), 1)
 

@@ -189,10 +189,11 @@ class MonoVideoOdometeryFromFile(object):
 class MonoVideoOdometeryFromCam(object):
     def __init__(self, 
                 cap,
-                fx = 4975.15099,
-                fy = 4923.0829,
-                pp = (317.1178, 244.2046), 
+                fx = 537.03135,
+                fy = 537.4687,
+                pp = (324.0338, 202.3821), 
                 lk_params=dict(winSize  = (21,21), criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01)), 
+                absolute_scale = 10,
                 detector=cv2.FastFeatureDetector_create(threshold=25, nonmaxSuppression=True)):
         
         '''
@@ -226,6 +227,7 @@ class MonoVideoOdometeryFromCam(object):
         self.t = np.zeros(shape=(3, 3))
         self.id = 0
         self.n_features = 0
+        self.absolute_scale = absolute_scale
 
         try:
             if not self.cap.isOpened():
@@ -260,9 +262,13 @@ class MonoVideoOdometeryFromCam(object):
         such that there are less than 2000 features remaining, a new feature
         detection is triggered. 
         '''
+        success = True
 
         if self.n_features < 2000:
             self.p0 = self.detect(self.old_frame)
+
+        if len(self.p0) == 0:
+            return False
 
 
         # Calculate optical flow between frames, st holds status
@@ -284,9 +290,9 @@ class MonoVideoOdometeryFromCam(object):
             E, _ = cv2.findEssentialMat(self.good_new, self.good_old, cameraMatrix=self.camMat, method=cv2.RANSAC, prob=0.999, threshold=1.0, mask=None)
             _, R, t, _ = cv2.recoverPose(E, self.good_old, self.good_new,  cameraMatrix=self.camMat, R=self.R.copy(), t=self.t.copy(), mask=None)
 
-            absolute_scale = self.get_absolute_scale()
-            if (absolute_scale > 0.1 and abs(t[2][0]) > abs(t[0][0]) and abs(t[2][0]) > abs(t[1][0])):
-                self.t = self.t + absolute_scale*self.R.dot(t)
+            #absolute_scale = self.get_absolute_scale()
+            if (self.absolute_scale > 0.1 and abs(t[2][0]) > abs(t[0][0]) and abs(t[2][0]) > abs(t[1][0])):
+                self.t = self.t + self.absolute_scale*self.R.dot(t)
                 self.R = R.dot(self.R)
 
         # Save the total number of good features
@@ -303,14 +309,14 @@ class MonoVideoOdometeryFromCam(object):
 
         return adj_coord.flatten()
 
-
+    '''
     def get_absolute_scale(self):
-        '''Used to provide scale estimation for mutliplying
-           translation vectors
-        
-        Returns:
-            float -- Scalar value allowing for scale estimation
-        '''
+        # Used to provide scale estimation for mutliplying
+        #   translation vectors
+        #
+        #Returns:
+        #    float -- Scalar value allowing for scale estimation
+        #
         pose = self.pose[self.id - 1].strip().split()
         x_prev = float(pose[3])
         y_prev = float(pose[7])
@@ -325,7 +331,7 @@ class MonoVideoOdometeryFromCam(object):
         prev_vect = np.array([[x_prev], [y_prev], [z_prev]])
         
         return np.linalg.norm(true_vect - prev_vect)
-
+    '''
 
     def process_frame(self):
         '''Processes images in sequence frame by frame
@@ -334,16 +340,23 @@ class MonoVideoOdometeryFromCam(object):
         if self.id < 2:
             #self.old_frame = cv2.imread(self.file_path +str().zfill(6)+'.png', cv2.IMREAD_GRAYSCALE)
             #self.current_frame = cv2.imread(self.file_path + str(1).zfill(6)+'.png', cv2.IMREAD_GRAYSCALE)
-            self.colorframe,_ = self.cap.read()
-            self.old_frame = cv2.cvtColor(self.colorframe, cv2.COLOR_BGR2GRAY) 
-            self.colorframe,_ = self.cap.read()
-            self.current_frame,_ = cv2.cvtColor(self.colorframe, cv2.COLOR_BGR2GRAY)
-            self.visual_odometery()
-            self.id = 2
+            ret = False
+            while not ret:
+                ret, self.colorframe = self.cap.read()
+            self.old_frame = cv2.cvtColor(self.colorframe, cv2.COLOR_BGR2GRAY)
+
+            ret=False
+            while not ret: 
+                ret, self.colorframe = self.cap.read()
+            self.current_frame = cv2.cvtColor(self.colorframe, cv2.COLOR_BGR2GRAY)
+            if self.visual_odometery():
+                self.id = 2
         else:
             self.old_frame = self.current_frame
-            self.colorframe = self.cap.read()
-            self.current_frame,_ = cv2.cvtColor(self.colorframe, cv2.COLOR_BGR2GRAY)
+            ret=False
+            while not ret:
+                ret,self.colorframe = self.cap.read()
+            self.current_frame = cv2.cvtColor(self.colorframe, cv2.COLOR_BGR2GRAY)
             self.visual_odometery()
             self.id += 1
 
